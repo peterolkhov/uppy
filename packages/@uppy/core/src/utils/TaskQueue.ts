@@ -190,7 +190,10 @@ export class TaskQueue {
   resume(): void {
     this.#paused = false
     // Kick off tasks up to concurrency limit
-    const available = this.#concurrency - this.#running
+    const available = Math.min(
+      this.#queue.length,
+      this.#concurrency - this.#running,
+    )
     for (let i = 0; i < available; i++) {
       this.#advance()
     }
@@ -220,7 +223,10 @@ export class TaskQueue {
       typeof value !== 'number' || value === 0 ? Infinity : value
     // If concurrency increased, try to start more tasks
     if (!this.#paused) {
-      const available = this.#concurrency - this.#running
+      const available = Math.min(
+        this.#queue.length,
+        this.#concurrency - this.#running,
+      )
       for (let i = 0; i < available; i++) {
         this.#advance()
       }

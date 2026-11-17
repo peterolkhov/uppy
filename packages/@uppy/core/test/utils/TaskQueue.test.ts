@@ -4,6 +4,67 @@ import delay from '../../lib/utils/delay.js'
 import { TaskQueue } from '../../lib/utils/TaskQueue.js'
 
 describe('TaskQueue', () => {
+  it.each([undefined, 0, Infinity])(
+    'resumes empty and pending queues with concurrency %s',
+    async (concurrency) => {
+      const queue = new TaskQueue(
+        concurrency === undefined ? undefined : { concurrency },
+      )
+      queue.resume()
+      queue.pause()
+
+      const blocker = Promise.withResolvers<void>()
+      const started: number[] = []
+      const tasks = [1, 2, 3].map((value) =>
+        queue.add(async () => {
+          started.push(value)
+          await blocker.promise
+          return value
+        }),
+      )
+
+      queue.resume()
+      expect(started).toEqual([])
+      await Promise.resolve()
+      expect(started).toEqual([1, 2, 3])
+      expect(queue.running).toBe(3)
+      expect(queue.pending).toBe(0)
+
+      blocker.resolve()
+      await expect(Promise.all(tasks)).resolves.toEqual([1, 2, 3])
+    },
+  )
+
+  it.each([0, Infinity])(
+    'starts pending tasks when concurrency becomes %s without starting aborted tasks',
+    async (concurrency) => {
+      const queue = new TaskQueue({ concurrency: 1 })
+      const blocker = Promise.withResolvers<void>()
+      const started: number[] = []
+      const tasks = [1, 2, 3].map((value) =>
+        queue.add(async () => {
+          started.push(value)
+          await blocker.promise
+          return value
+        }),
+      )
+      const reason = new Error('cancel queued task')
+      const aborted = tasks[2].catch((error) => error)
+
+      queue.concurrency = concurrency
+      expect(started).toEqual([1])
+      tasks[2].abort(reason)
+      await Promise.resolve()
+      expect(started).toEqual([1, 2])
+      expect(queue.running).toBe(2)
+      expect(queue.pending).toBe(0)
+
+      blocker.resolve()
+      await Promise.all([tasks[0], tasks[1]])
+      await expect(aborted).resolves.toBe(reason)
+    },
+  )
+
   it('runs queued tasks in FIFO order after resume', async () => {
     const queue = new TaskQueue({ concurrency: 1 })
     queue.pause()

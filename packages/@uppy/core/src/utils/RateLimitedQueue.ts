@@ -238,7 +238,11 @@ export class RateLimitedQueue {
   resume(): void {
     this.#paused = false
     clearTimeout(this.#pauseTimer)
-    for (let i = 0; i < this.limit; i++) {
+    const available = Math.min(
+      this.#queuedHandlers.length,
+      this.limit - this.#activeRequests,
+    )
+    for (let i = 0; i < available; i++) {
       this.#queueNext()
     }
   }
